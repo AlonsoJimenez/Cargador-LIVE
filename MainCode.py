@@ -3,6 +3,9 @@ import hashlib
 from hashlib import md5
 app = Flask(__name__)
 
+owners = []
+chargers = []
+
 def getUser(user):
     for xOwner in owners:
         if xOwner.username == user.username:
@@ -12,8 +15,8 @@ def getUser(user):
 def searchUser(user):
     name = user.username
     for xOwner in owners:
-        if xOwner.username == name
-        return True
+        if(xOwner.username == name):
+            return True
     return False
 
 def authorization(validate):
@@ -22,33 +25,41 @@ def authorization(validate):
             if((getUser(validate)).password == validate.password):
                 return True
         return False
+    except:
+        return False
 
-owners = {}
-chargers = []
 
 @app.route('/newUser', methods = ['POST'])
 def processingUser():
+    global owners
     try:
         user = request.form('username')
-        password = hashlib.md5(b request.form('password')).hexdigest()
+        tempPassword = request.form('password')
+        password = hashlib.md5(tempPassword.encode('utf8')).hexdigest()
         tempUser = owner(user, password)
         if(searchUser(tempUser)):
             abort(409, "This user alrady exists" )
         else:
-            chargers += [tempUser]
+            owners += [tempUser]
     except:
         return abort(400, "Incomplete form")
 
 
 @app.route('/newCharger', methods = ['POST'])
 def processingCharger():
+    global chargers
     try:
         localVar = request.form['local']
         isActiveVar = request.form['isActive']
-        whoOwnsVar = request.form['whoOwns']
-
-
-        charger(localVar, isActiveVar, whoOwnsVar)  
+        username = request.get_json()['whoOwns']['username']
+        password = request.get_json()['whoOwns']['password']
+        tempUser = owner(username, password)
+        if(authorization(tempUser)):
+            newCharger = charger(localVar, isActiveVar, tempUser)  
+            getUser(tempUser).ownerChargers += [newCharger]
+            chargers += [newCharger]
+        else:
+            return abort(401, "User  not authorized")
     except:
         return abort(400, "Incomplete form")
 
@@ -85,7 +96,7 @@ class charger:
             instance.owner = whoOwns
             return instance
         else:
-            return "Error in charger argguments"
+            return "Error in charger arguments"
 
     def changeActivity(self,):
         self.occupied = not self.occupied
