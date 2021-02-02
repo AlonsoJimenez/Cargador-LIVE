@@ -1,10 +1,31 @@
-from flask import Flask, abort, request
+from flask import Flask, abort, request, jsonify
 import hashlib
 from hashlib import md5
+from functools import wraps
+import json
+
 app = Flask(__name__)
 
 owners = []
 chargers = []
+
+def authAu(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        tempUser = owner(auth.username, auth.password)
+        if(authorization(tempUser)):
+            return f(*args, **kwargs)
+        else:
+            return abort(401, "User not authorized")
+    return decorated
+
+def makeJsonList(list):
+    result = []
+    for ob in list:
+        result += [ob.__dict__]
+    return(json.dumps(result))
+
 
 def getUser(user):
     for xOwner in owners:
@@ -22,7 +43,9 @@ def searchUser(user):
 def authorization(validate):
     try:
         if searchUser(validate):
-            if((getUser(validate)).password == validate.password):
+            tempPassword = validate.password
+            tempPassword =  hashlib.md5(tempPassword.encode('utf8')).hexdigest()
+            if((getUser(validate)).password == tempPassword):
                 return True
         return False
     except:
@@ -44,24 +67,33 @@ def processingUser():
     except:
         return abort(400, "Incomplete form")
 
+@app.route('chargerOcupied', methods = ['POST'])
+@auth
+''''''
+
+
 
 @app.route('/newCharger', methods = ['POST'])
+@auth
 def processingCharger():
     global chargers
     try:
         localVar = request.form['local']
         isActiveVar = request.form['isActive']
         username = request.get_json()['whoOwns']['username']
-        password = request.get_json()['whoOwns']['password']
-        tempUser = owner(username, password)
-        if(authorization(tempUser)):
-            newCharger = charger(localVar, isActiveVar, tempUser)  
-            getUser(tempUser).ownerChargers += [newCharger]
-            chargers += [newCharger]
-        else:
-            return abort(401, "User  not authorized")
+        newCharger = charger(localVar, isActiveVar, username)  
+        getUser(tempUser).ownerChargers += [newCharger]
+        chargers += [newCharger]
     except:
         return abort(400, "Incomplete form")
+
+@app.route('/getNetwork', methods = ['GET'])
+def getNetwork():
+    global chargers
+    try:
+        return(makeJsonList(chargers))
+    except:
+        return abort(400, "Unable to process request")
 
 
 
@@ -83,8 +115,6 @@ class charger:
     occupied = True
     active = True
     owner = None
-
-
 
     def __new__(cls, local, isActive, whoOwns):
         global owners
