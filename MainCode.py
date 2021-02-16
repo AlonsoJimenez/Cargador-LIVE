@@ -1,4 +1,4 @@
-from flask import Flask, abort, request, jsonify
+from flask import Flask, abort, request, jsonify, make_response
 import hashlib
 from hashlib import md5
 from functools import wraps
@@ -20,12 +20,30 @@ def authAu(f):
             return abort(401, "User not authorized")
     return decorated
 
+def changeStatus(local, charger, username):
+    global chargers
+    global owners
+    for xCharger in chargers:
+        if(xCharger.equals(local)):
+            xCharger.occupied = not xCharger.occupied
+    for xOwner in owners:
+        if(xOwner.username == username):
+            for userCharger in xOwner.ownerChargers:
+                if(userCharger.equals(local)):
+                    userCharger.occupied = not userCharger.occupied
+
+def findCharger(local):
+    global chargers
+    for xCharger in chargers:
+        if(xCharger.equals(local)):
+            return xCharger
+    return None
+
 def makeJsonList(list):
     result = []
     for ob in list:
         result += [ob.__dict__]
     return(json.dumps(result))
-
 
 def getUser(user):
     for xOwner in owners:
@@ -40,6 +58,14 @@ def searchUser(user):
             return True
     return False
 
+def locationUsed(location):
+    global owners
+    for xOwner in owners:
+        for xCharger in xOwner.ownerChargers:
+            if(xCharger.localization == location):
+                return True
+    return False
+
 def authorization(validate):
     try:
         if searchUser(validate):
@@ -51,39 +77,52 @@ def authorization(validate):
     except:
         return False
 
-
 @app.route('/newUser', methods = ['POST'])
 def processingUser():
     global owners
     try:
-        user = request.form('username')
-        tempPassword = request.form('password')
+        user = request.form['username']
+        tempPassword = request.form['password']
         password = hashlib.md5(tempPassword.encode('utf8')).hexdigest()
         tempUser = owner(user, password)
         if(searchUser(tempUser)):
-            abort(409, "This user alrady exists" )
+            return make_response("This user already exists", 409 )
         else:
             owners += [tempUser]
+            return make_response("OK", 200)
     except:
         return abort(400, "Incomplete form")
 
 @app.route('chargerOcupied', methods = ['POST'])
-@auth
-''''''
-
-
+@authAu
+def changeCharger():
+    global chargers
+    try:
+        localization = eval(request.form['local'])
+        xCharger = findCharger(localization)
+        if(request.authorization.username == xCharger.owner):
+            changeStatus(localization, xCharger, request.authorization.username)
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
+    except:
+        return abort(400, "Invalid form information")
 
 @app.route('/newCharger', methods = ['POST'])
-@auth
+@authAu
 def processingCharger():
     global chargers
     try:
-        localVar = request.form['local']
-        isActiveVar = request.form['isActive']
-        username = request.get_json()['whoOwns']['username']
-        newCharger = charger(localVar, isActiveVar, username)  
-        getUser(tempUser).ownerChargers += [newCharger]
-        chargers += [newCharger]
+        localVar = eval(request.form['local'])
+        if(locationUsed(localVar)):
+            return make_response("Location has been already registered as charger", 400)
+        else:
+            isActiveVar = eval(request.form['isActive'])
+            username = request.authorization.username
+            newCharger = charger(localVar, isActiveVar, username)  
+            getUser(owner(username, "ACCESS")).ownerChargers += [newCharger]
+            chargers += [newCharger]
+            return make_response("OK", 200)
     except:
         return abort(400, "Incomplete form")
 
@@ -95,8 +134,6 @@ def getNetwork():
     except:
         return abort(400, "Unable to process request")
 
-
-
 class owner:
 
     username = ""
@@ -107,14 +144,17 @@ class owner:
         self.username = varUser
         self.password = varPassword
 
-
-
 class charger:
 
     localization = []
     occupied = True
     active = True
     owner = None
+
+    def equals(self, local):
+        if self.localization == local:
+            return True
+        return False
 
     def __new__(cls, local, isActive, whoOwns):
         global owners
@@ -134,7 +174,6 @@ class charger:
     def changeStatus(self,):
         self.active = not self.active
 
+
 if __name__ =="__main__":
     app.run()
-
-
