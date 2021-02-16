@@ -93,7 +93,7 @@ def processingUser():
     except:
         return abort(400, "Incomplete form")
 
-@app.route('chargerOcupied', methods = ['POST'])
+@app.route('/chargerOcupied', methods = ['POST'])
 @authAu
 def changeCharger():
     global chargers
