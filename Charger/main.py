@@ -20,17 +20,19 @@ def authAu(f):
             return abort(401, "User not authorized")
     return decorated
 
-def changeStatus(local, charger, username):
+def changeStatus(local, charger):
     global chargers
     global owners
     for xCharger in chargers:
         if(xCharger.equals(local)):
             xCharger.occupied = not xCharger.occupied
+    
+def tempUserFinder(varUsername):
+    global owners
     for xOwner in owners:
-        if(xOwner.username == username):
-            for userCharger in xOwner.ownerChargers:
-                if(userCharger.equals(local)):
-                    userCharger.occupied = not userCharger.occupied
+        if xOwner.username == varUsername:
+            return xOwner
+    return None
 
 def findCharger(local):
     global chargers
@@ -39,9 +41,9 @@ def findCharger(local):
             return xCharger
     return None
 
-def makeJsonList(list):
+def makeJsonList(listVar):
     result = []
-    for ob in list:
+    for ob in listVar:
         result += [ob.__dict__]
     return(json.dumps(result))
 
@@ -62,7 +64,7 @@ def locationUsed(location):
     global owners
     for xOwner in owners:
         for xCharger in xOwner.ownerChargers:
-            if(xCharger.localization == location):
+            if(xCharger == location):
                 return True
     return False
 
@@ -89,24 +91,12 @@ def processingUser():
             return make_response("This user already exists", 409 )
         else:
             owners += [tempUser]
+            print(owners)
+            print(tempUser.ownerChargers)
+            print(chargers)
             return make_response("OK", 200)
     except:
         return abort(400, "Incomplete form")
-
-@app.route('/chargerOcupied', methods = ['POST'])
-@authAu
-def changeCharger():
-    global chargers
-    try:
-        localization = eval(request.form['local'])
-        xCharger = findCharger(localization)
-        if(request.authorization.username == xCharger.owner):
-            changeStatus(localization, xCharger, request.authorization.username)
-            return make_response("Ok", 200) 
-        else:
-            return abort(401, "User not authorized")
-    except:
-        return abort(400, "Invalid form information")
 
 @app.route('/newCharger', methods = ['POST'])
 @authAu
@@ -120,19 +110,101 @@ def processingCharger():
             isActiveVar = eval(request.form['isActive'])
             username = request.authorization.username
             newCharger = charger(localVar, isActiveVar, username)  
-            getUser(owner(username, "ACCESS")).ownerChargers += [newCharger]
+            tempUserFinder(username).ownerChargers += [localVar]
             chargers += [newCharger]
             return make_response("OK", 200)
     except:
         return abort(400, "Incomplete form")
 
+
+@app.route('/chargerOcupied', methods = ['PUT'])
+@authAu
+def changeCharger():
+    global chargers
+    try:
+        localization = eval(request.form['local'])
+        xCharger = findCharger(localization)
+        if(request.authorization.username == xCharger.owner):
+            changeStatus(localization, xCharger)
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
+    except:
+        return abort(400, "Invalid form information")
+
+@app.route('/deactivate', methods = ['PUT'])
+@authAu
+def deactivate():
+    global chargers
+    try:
+        localVar = eval(request.form['local'])
+        tempCharger = findCharger(localVar)
+        tempCharger.active = not tempCharger.active
+        return make_response("OK", 200)
+    except:
+        return abort(400, "Unable to process request")
+
+@app.route('/changePassword', methods = ['PUT'])
+@authAu
+def changePassword():
+    global owners
+    try:
+        tempPassword = request.form['password']
+        newPassword = hashlib.md5(tempPassword.encode('utf8')).hexdigest()
+        user = tempUserFinder(request.authorization.username)
+        user.password = newPassword
+        return make_response("ok", 200)
+    except:
+        return abort(400, "Unable to process request")
+
+
 @app.route('/getNetwork', methods = ['GET'])
 def getNetwork():
     global chargers
     try:
-        return(makeJsonList(chargers))
+        return make_response(makeJsonList(chargers), 200)
     except:
         return abort(400, "Unable to process request")
+
+
+@app.route('/userChargers', methods = ['GET'])
+def userChargers():
+    global chargers
+    try:
+        user = tempUserFinder(request.form['username'])
+        result = []
+        for xLocal in user.ownerChargers:
+            result += [findCharger(xLocal)]
+        return make_response(makeJsonList(result), 200)
+    except:
+        return abort(400, "Unable to process request")
+
+
+@app.route('/getCharger', methods = ['GET'])
+def getCharger():
+    global chargers
+    try:
+        local = findCharger(request.form['local'])
+        return make_response(makeJsonList([local]), 200)
+    except:
+        return abort(400, "Unable to process request")
+
+
+@app.route('/deleteUser', methods = ['DELETE'])
+@authAu
+def deleteUser():
+    global chargers
+    global owners
+    try:
+        user = request.authorization.username
+        userChargers = tempUserFinder(user).ownerChargers
+        for xCharger in userChargers:
+            chargers.remove(findCharger(xCharger))
+        owners.remove(tempUserFinder(user))
+        return make_response("Ok", 200)
+    except:
+        return abort(400, "Unable to process request")
+
 
 class owner:
 
@@ -140,9 +212,13 @@ class owner:
     password = ""
     ownerChargers = []
 
-    def __init__(self, varUser, varPassword):
+    def __init__(self, varUser, varPassword, ownerChargersVar = []):
         self.username = varUser
         self.password = varPassword
+        self.ownerChargers = ownerChargersVar
+
+    def getChargers(self,):
+        return self.ownerChargers
 
 class charger:
 
@@ -156,7 +232,7 @@ class charger:
             return True
         return False
 
-    def __new__(cls, local, isActive, whoOwns):
+    def __new__(cls, local, isActive, whoOwns, isOccupied = True):
         global owners
         
         if(local != None and isActive != None and whoOwns != None):
@@ -164,6 +240,7 @@ class charger:
             instance.localization = local
             instance.active = isActive
             instance.owner = whoOwns
+            instance.occupied = isOccupied
             return instance
         else:
             return "Error in charger arguments"
