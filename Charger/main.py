@@ -1,14 +1,23 @@
-from flask import Flask, abort, request, jsonify, make_response
+from flask import Flask, abort, request, jsonify, make_response, json
 import hashlib
 from hashlib import md5
 from functools import wraps
 import json
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
+#la linea inferior de codigo tiene el proposito de permitir saltar los protocolos CORS y realizar pruebas con una pagina en Node JS
+cors = CORS(app, resources = {r"/*": {"origins" : "*"}})
 
+#owners y chargers son las listas usadas como base de datos del programa
+#pueden ser mejoradas en versiones posteriores
 owners = []
 chargers = []
 
+
+#funcion que sirve como wrap para los metodos que requieran autorizacion
+#puede devolver la funcion del metodo http o un error
 def authAu(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -20,13 +29,22 @@ def authAu(f):
             return abort(401, "User not authorized")
     return decorated
 
+
+'''
+las funciones: tempUserFinder, findCharger, getUser, searchUser, locationUsed, authorization,
+podran ser optimizadas para ser incluidas con una busqueda binaria u otro algoritmo optimo para una busqueda 
+mas rapida de los items
+'''
+
+#funcion cambia el estado y lo actualiza para el acceso de informacion
 def changeStatus(local, charger):
     global chargers
     global owners
     for xCharger in chargers:
         if(xCharger.equals(local)):
             xCharger.occupied = not xCharger.occupied
-    
+
+#funcion hace busqueda de usuario por medio del username    
 def tempUserFinder(varUsername):
     global owners
     for xOwner in owners:
@@ -34,6 +52,7 @@ def tempUserFinder(varUsername):
             return xOwner
     return None
 
+#encuentra cargador por medio de la lista de cordenadas del cargador
 def findCharger(local):
     global chargers
     for xCharger in chargers:
@@ -41,18 +60,22 @@ def findCharger(local):
             return xCharger
     return None
 
+#funcion reibe una lista cualquiera y cambia a un String con formato tipo JSON
 def makeJsonList(listVar):
     result = []
     for ob in listVar:
         result += [ob.__dict__]
     return(json.dumps(result))
 
+#encuentra ususario por medio de la instacia de otro usuario con mismo nombre de usuario
+#un usuario cualquiera no puede crear o instanciar una cuenta con nombre de usaurio repetido la funcion es auxiliar
 def getUser(user):
     for xOwner in owners:
         if xOwner.username == user.username:
             return xOwner
     return None
 
+#funcion utiliza el usuario para buscar el ususario en la base de datos y devuelve True en caso de tener uno con el mismo username
 def searchUser(user):
     name = user.username
     for xOwner in owners:
@@ -60,6 +83,7 @@ def searchUser(user):
             return True
     return False
 
+#devuelve True en caso de que la localizacion del parametro este en la base de datos
 def locationUsed(location):
     global owners
     for xOwner in owners:
@@ -68,6 +92,8 @@ def locationUsed(location):
                 return True
     return False
 
+#funcion auxiliar para verificar el usuario y la contrasena
+#verifica la existencia del usuario y la contrasena es encriptada para poder verificarla con la base de datos
 def authorization(validate):
     try:
         if searchUser(validate):
@@ -79,6 +105,8 @@ def authorization(validate):
     except:
         return False
 
+#funcion recibe la informacion para crear nuevos usuarios
+#la funcion esta protegida contra excepciones de nombre de usuario repetido, formulario invalido y errores de proceso del servidor
 @app.route('/newUser', methods = ['POST'])
 def processingUser():
     global owners
@@ -98,6 +126,9 @@ def processingUser():
     except:
         return abort(400, "Incomplete form")
 
+#recibe informacion para crear un nuevo cargador
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
 @app.route('/newCharger', methods = ['POST'])
 @authAu
 def processingCharger():
@@ -116,7 +147,9 @@ def processingCharger():
     except:
         return abort(400, "Incomplete form")
 
-
+#recibe informacion para actualizar el estado ocupado del cargador
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
 @app.route('/chargerOcupied', methods = ['PUT'])
 @authAu
 def changeCharger():
@@ -132,6 +165,9 @@ def changeCharger():
     except:
         return abort(400, "Invalid form information")
 
+#funcion recibe informacion para desactivar el uso del cargador seleccionado
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
 @app.route('/deactivate', methods = ['PUT'])
 @authAu
 def deactivate():
@@ -144,6 +180,9 @@ def deactivate():
     except:
         return abort(400, "Unable to process request")
 
+#funcion actualiza la contrasena del usuario, igualmente la conrsana es encriptada
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
 @app.route('/changePassword', methods = ['PUT'])
 @authAu
 def changePassword():
@@ -157,16 +196,23 @@ def changePassword():
     except:
         return abort(400, "Unable to process request")
 
-
+#funcion devuelve toda la informacion publica de la red de cargadores en el mapa
 @app.route('/getNetwork', methods = ['GET'])
 def getNetwork():
     global chargers
     try:
-        return make_response(makeJsonList(chargers), 200)
+        data = makeJsonList(chargers)
+        response = app.response_class(
+        response=data,
+        status=200,
+        mimetype='application/json'
+    )
+        return response
     except:
         return abort(400, "Unable to process request")
 
-
+#funcion realiza una busqueda de cargadores en la red por usuario y devuelve su informacion
+#es de acceso publico
 @app.route('/userChargers', methods = ['GET'])
 def userChargers():
     global chargers
@@ -175,21 +221,36 @@ def userChargers():
         result = []
         for xLocal in user.ownerChargers:
             result += [findCharger(xLocal)]
-        return make_response(makeJsonList(result), 200)
+        response = app.response_class(
+        response=makeJsonList(result),
+        status=200,
+        mimetype='application/json'
+        )
+        return response
     except:
         return abort(400, "Unable to process request")
 
-
+#funcion realiza una busqued de un solo cargador por medio de la localizacion y luego devuelve la informacion
+#la funcion es de acceso publico
 @app.route('/getCharger', methods = ['GET'])
 def getCharger():
     global chargers
     try:
         local = findCharger(request.form['local'])
-        return make_response(makeJsonList([local]), 200)
+        response = app.response_class(
+        response=makeJsonList([local]),
+        status=200,
+        mimetype='application/json'
+        )
+        return response
     except:
         return abort(400, "Unable to process request")
 
-
+#funcion realiza la busqueda de un usuario para luego eliminarlo
+#requiere autorizacion
+#esta verificado contra excepciones de procesamiento y formulario incompleto
+#realiza tambien la eliminacion de los cargadores del usuario
+#la funcion puede ser optimizada por medio de mejores y mas adecuados aloritmos de busqueda
 @app.route('/deleteUser', methods = ['DELETE'])
 @authAu
 def deleteUser():
@@ -205,21 +266,24 @@ def deleteUser():
     except:
         return abort(400, "Unable to process request")
 
-
+#objeto de tipo usuario, owner el nombre ya que sera dueno de cargadores ingresados por el al sistema
 class owner:
 
     username = ""
     password = ""
     ownerChargers = []
 
+    #funcion para la instanciacion
     def __init__(self, varUser, varPassword, ownerChargersVar = []):
         self.username = varUser
         self.password = varPassword
         self.ownerChargers = ownerChargersVar
 
+    #funcion es un getter de los cargadores del mismo
     def getChargers(self,):
         return self.ownerChargers
 
+#objeto de tipo cargador
 class charger:
 
     localization = []
@@ -227,14 +291,16 @@ class charger:
     active = True
     owner = None
 
+    #funcion realiza una comparacion de cargadores por medio de un dato que en teoria es unico (la localizaion)
     def equals(self, local):
         if self.localization == local:
             return True
         return False
 
+    #funcion instancia bajo condiciones adecuadas el cargador
     def __new__(cls, local, isActive, whoOwns, isOccupied = True):
         global owners
-        
+        #recuerde al usuario sin importar que sea por medio de RestAPIS o por consola debe incluir argumentos de la instancia
         if(local != None and isActive != None and whoOwns != None):
             instance = super(charger, cls).__new__(cls)
             instance.localization = local
@@ -245,12 +311,14 @@ class charger:
         else:
             return "Error in charger arguments"
 
+    #cambia el estado del objeto entre ocupado y desocupado
     def changeActivity(self,):
         self.occupied = not self.occupied
 
+    #cambia estado del objeto entre activado y desactivado
     def changeStatus(self,):
         self.active = not self.active
 
-
+#codigo inferior corre el programa
 if __name__ =="__main__":
     app.run()
