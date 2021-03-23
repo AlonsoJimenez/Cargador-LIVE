@@ -52,6 +52,24 @@ def tempUserFinder(varUsername):
             return xOwner
     return None
 
+#encuentra cargador por medio del voltaje deseado
+def findVoltage(voltage):
+    global chargers
+    result = []
+    for xCharger in chargers:
+        if(xCharger.voltage==voltage):
+            result+=[xCharger]
+    return result
+
+#encuentra cargador por medio del tipo de cargador
+def findChargerType(typeCharger):
+    global chargers
+    result = []
+    for xCharger in chargers:
+        if(xCharger.chargerType==typeCharger):
+            result+=[xCharger]
+    return result
+
 #encuentra cargador por medio de la lista de cordenadas del cargador
 def findCharger(local):
     global chargers
@@ -175,8 +193,11 @@ def deactivate():
     try:
         localVar = eval(request.form['local'])
         tempCharger = findCharger(localVar)
-        tempCharger.active = not tempCharger.active
-        return make_response("OK", 200)
+        if(request.authorization.username == tempCharger.owner):
+            tempCharger.active = not tempCharger.active
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
     except:
         return abort(400, "Unable to process request")
 
@@ -193,6 +214,101 @@ def changePassword():
         user = tempUserFinder(request.authorization.username)
         user.password = newPassword
         return make_response("ok", 200)
+    except:
+        return abort(400, "Unable to process request")
+
+#funcion actualiza la foto de un cargador especifico
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
+@app.route('/changePic', methods = ['PUT'])
+@authAu
+def changePicture():
+    global chargers
+    try:
+        localVar = eval(request.form['local'])
+        tempCharger = findCharger(localVar)
+        newPic = request.form['picture']
+        if(request.authorization.username == tempCharger.owner):
+            tempCharger.picture = newPic
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
+    except:
+        return abort(400, "Unable to process request")
+
+#funcion actualiza referencia de un cargadppr especifico
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
+@app.route('/changeReference', methods = ['PUT'])
+@authAu
+def changeReference():
+    global chargers
+    try:
+        localVar = eval(request.form['local'])
+        tempCharger = findCharger(localVar)
+        newRef = request.form['reference']
+        if(request.authorization.username == tempCharger.owner):
+            tempCharger.reference = newRef
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
+    except:
+        return abort(400, "Unable to process request")
+
+#funcion actualiza tipo de cargador del mismo
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
+@app.route('/changeType', methods = ['PUT'])
+@authAu
+def changeType():
+    global chargers
+    try:
+        localVar = eval(request.form['local'])
+        tempCharger = findCharger(localVar)
+        newType = request.form['chargerType']
+        if(request.authorization.username == tempCharger.owner):
+            tempCharger.chargerType = newType
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
+    except:
+        return abort(400, "Unable to process request")
+
+#funcion actualiza los servicios disponibles en el cargador
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
+@app.route('/changeServices', methods = ['PUT'])
+@authAu
+def changeOtherServices():
+    global chargers
+    try:
+        localVar = eval(request.form['local'])
+        tempCharger = findCharger(localVar)
+        newServices = request.form['otherServices']
+        if(request.authorization.username == tempCharger.owner):
+            tempCharger.otherServices = newServices
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
+    except:
+        return abort(400, "Unable to process request")
+
+#funcion actualiza el voltaje del cargador
+#esta verificada contra varios errores
+#necesita verifiacion de tipo Basic Auth
+@app.route('/changeVoltage', methods = ['PUT'])
+@authAu
+def changeVoltage():
+    global chargers
+    try:
+        localVar = eval(request.form['local'])
+        tempCharger = findCharger(localVar)
+        newVoltage = eval(request.form['otherServices'])
+        if(request.authorization.username == tempCharger.owner):
+            tempCharger.voltage = voltage
+            return make_response("Ok", 200) 
+        else:
+            return abort(401, "User not authorized")
     except:
         return abort(400, "Unable to process request")
 
@@ -246,6 +362,38 @@ def getCharger():
     except:
         return abort(400, "Unable to process request")
 
+#funcion realiza una busqued de los cargadores por medio de tipo de cargador
+#la funcion es de acceso publico
+@app.route('/type', methods = ['GET'])
+def typeFinder():
+    global chargers
+    try:
+        chargerType = findChargerType(request.form['type'])
+        response = app.response_class(
+        response=makeJsonList(chargerType),
+        status=200,
+        mimetype='application/json'
+        )
+        return response
+    except:
+        return abort(400, "Unable to process request")
+
+#funcion realiza una busqued de los cargadores por medio de voltaje
+#la funcion es de acceso publico
+@app.route('/voltage', methods = ['GET'])
+def voltage():
+    global chargers
+    try:
+        voltage = findVoltage(request.form['voltage'])
+        response = app.response_class(
+        response=makeJsonList(voltage),
+        status=200,
+        mimetype='application/json'
+        )
+        return response
+    except:
+        return abort(400, "Unable to process request")
+
 #funcion realiza la busqueda de un usuario para luego eliminarlo
 #requiere autorizacion
 #esta verificado contra excepciones de procesamiento y formulario incompleto
@@ -287,6 +435,11 @@ class owner:
 class charger:
 
     localization = []
+    voltage = 0
+    chargerType = ""
+    picture = ""
+    reference = ""
+    otherServices = ""
     occupied = True
     active = True
     owner = None
