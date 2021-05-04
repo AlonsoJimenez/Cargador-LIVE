@@ -1,4 +1,5 @@
-from flask import Flask, abort, request, jsonify, make_response, json
+from flask import Flask
+fron flask import abort, request, jsonify, make_response, json
 import hashlib
 from hashlib import md5
 from functools import wraps
@@ -6,6 +7,7 @@ import json
 from flask_cors import CORS
 
 app = Flask(__name__)
+
 CORS(app)
 #la linea inferior de codigo tiene el proposito de permitir saltar los protocolos CORS y realizar pruebas con una pagina en Node JS
 cors = CORS(app, resources = {r"/*": {"origins" : "*"}})
@@ -473,5 +475,8 @@ class charger:
         self.active = not self.active
 
 #codigo inferior corre el programa
-if __name__ =="__main__":
-    app.run()
+if __name__ == '__main__':
+    # This is used when running locally only. When deploying to Google App
+    # Engine, a webserver process such as Gunicorn will serve the app. This
+    # can be configured by adding an `entrypoint` to app.yaml.
+    app.run(host='127.0.0.1', port=8080, debug=True)
