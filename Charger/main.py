@@ -1,5 +1,4 @@
-from flask import Flask
-from flask import abort, request, jsonify, make_response, json
+from flask import Flask, abort, request, jsonify, make_response, json
 import hashlib
 from hashlib import md5
 from functools import wraps
